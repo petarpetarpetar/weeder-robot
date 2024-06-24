@@ -5,11 +5,9 @@ import logging
 import argparse
 from typing import Dict
 
-
 # Configuration
 SERIAL_PORT = "/dev/ttyUSB0"  # Update with your serial port
 BAUD_RATE = 115200
-
 
 # Argument parser for command-line options
 parser = argparse.ArgumentParser(description="Motor Control Script")
@@ -42,18 +40,29 @@ logger.addHandler(console_handler)
 
 class SerialCommunicator:
     def __init__(self, port: str, baud_rate: int):
-        self.ser = serial.Serial(port, baud_rate, timeout=1)
-        logging.info(f"Serial port open: {self.ser.is_open}")
+        try:
+            self.ser = serial.Serial(port, baud_rate, timeout=1)
+            logging.info(f"Serial port open: {self.ser.is_open}")
+        except serial.SerialException as e:
+            logging.error(f"Failed to open serial port: {e}")
+            raise
 
     def send_command(self, command: str) -> None:
-        self.ser.write(command.encode())
-        logging.info(f"Sent: {command.strip()}")
+        try:
+            self.ser.write(command.encode())
+            logging.info(f"Sent: {command.strip()}")
+        except serial.SerialException as e:
+            logging.error(f"Failed to send command: {e}")
 
     def read_serial(self) -> None:
         while True:
-            if self.ser.in_waiting > 0:
-                data = self.ser.readline().decode().strip()
-                logging.info(f"Received: {data}")
+            try:
+                if self.ser.in_waiting > 0:
+                    data = self.ser.readline().decode().strip()
+                    logging.info(f"Received: {data}")
+            except serial.SerialException as e:
+                logging.error(f"Failed to read from serial port: {e}")
+                break
 
     def close(self) -> None:
         self.ser.close()
@@ -130,38 +139,46 @@ class KeyboardController:
             "a": False,
             "s": False,
             "d": False,
-            "q": False,  # Not really needed, just to keep everything consistent
-            "e": False,  # Not really needed, just to keep everything consistent
+            "q": False,
+            "e": False,
         }
 
     def on_key_event(self, event: keyboard.KeyboardEvent) -> None:
+        if event.name not in self.key_states:
+            return
+
         if event.event_type == "down" and not self.key_states[event.name]:
             self.key_states[event.name] = True
-            if event.name == "q":
-                self.motor_controller.decrease_speed()
-            elif event.name == "e":
-                self.motor_controller.increase_speed()
-            elif event.name == "w":
-                self.motor_controller.motor_1_forward_start()
-            elif event.name == "s":
-                self.motor_controller.motor_1_backward_start()
-            elif event.name == "a":
-                self.motor_controller.motor_2_forward_start()
-            elif event.name == "d":
-                self.motor_controller.motor_2_backward_start()
+            self.handle_key_press(event.name)
             logging.debug(f"Key pressed: {event.name}")
-
         elif event.event_type == "up" and self.key_states[event.name]:
             self.key_states[event.name] = False
-            if event.name == "w":
-                self.motor_controller.motor_1_forward_stop()
-            elif event.name == "s":
-                self.motor_controller.motor_1_backward_stop()
-            elif event.name == "a":
-                self.motor_controller.motor_2_forward_stop()
-            elif event.name == "d":
-                self.motor_controller.motor_2_backward_stop()
+            self.handle_key_release(event.name)
             logging.debug(f"Key released: {event.name}")
+
+    def handle_key_press(self, key: str) -> None:
+        if key == "q":
+            self.motor_controller.decrease_speed()
+        elif key == "e":
+            self.motor_controller.increase_speed()
+        elif key == "w":
+            self.motor_controller.motor_1_forward_start()
+        elif key == "s":
+            self.motor_controller.motor_1_backward_start()
+        elif key == "a":
+            self.motor_controller.motor_2_forward_start()
+        elif key == "d":
+            self.motor_controller.motor_2_backward_start()
+
+    def handle_key_release(self, key: str) -> None:
+        if key == "w":
+            self.motor_controller.motor_1_forward_stop()
+        elif key == "s":
+            self.motor_controller.motor_1_backward_stop()
+        elif key == "a":
+            self.motor_controller.motor_2_forward_stop()
+        elif key == "d":
+            self.motor_controller.motor_2_backward_stop()
 
 
 class MainController:
